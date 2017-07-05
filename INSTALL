@@ -1,0 +1,9 @@
+To install pyngs execute from a shell in the source folder:
+
+python setup.py install
+
+You need python 2.7. To avoid root access use conda or virtualenv.
+
+After installation you can run 'pysqt' or 'pyfilter'
+
+Use --help option to see the features and options syntax.
