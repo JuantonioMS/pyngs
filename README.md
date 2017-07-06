@@ -1,14 +1,14 @@
 Pyngs
 =====
 
-Pyngs is a bioinformatic tool ....
+Pyngs is a bioinformatic toolbox. Analyzer and filter Illumina and Solexa sequencing strategies.
 
 pysqt
 -----
 
-Is an analizer ...
+Is aa NGS analyzer. It can read SAM, Fastq and Fasta format.
 
 pyfilter
 --------
 
-Is a filter ....
+Is a NGS filter. It can switch to Fastq, Fasta and SAM formats.
