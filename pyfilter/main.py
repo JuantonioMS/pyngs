@@ -11,7 +11,6 @@ class Bunch(object):
   def __init__(self, adict):
     self.__dict__.update(adict)
 
-
 def asciidetection(quality):
     low_list = [chr(character) for character in range(33,59)]
     high_list = [chr(character) for character in range(74,127)]
@@ -58,7 +57,7 @@ def run(arguments):
     debug("Flags", "arguments", arguments)
 
     arguments['input'] = argparse.FileType('r')(arguments['input'])
-    arguments['text'] = argparse.FileType('w')(arguments['text'])
+    #arguments['text'] = argparse.FileType('w')(arguments['text'])
     args = Bunch(arguments)
     debug("Flags", "args", args)
     debug("Flags", "argument list", sys.argv)
@@ -67,10 +66,10 @@ def run(arguments):
     name, ext = args.input.name.split(".")
     sys.stdout.write("File %s loaded, extension .%s detected\n" % (args.input.name, ext))
 
-    if ext not in ("fq", "fastq", "fasta", "sam"):
+    if ext not in ("fq", "fastq", "fasta"):
         sys.exit("Wrong extension!\n" + "Please, check your file extension is (fq, fastq, fasta, sam).")
 
-    if ext in ("fq", "fastq") and not args.testpool:
+    if ext in ("fq", "fastq"):
         debug("Flags", "FastQ section enter")
 
         try:
@@ -584,18 +583,18 @@ def run(arguments):
 
                 flag_one, flag_two = switch(flag_one, flag_two)
 
-    temporalfileone.seek(0)
-    temporalfiletwo.seek(0)
-    try:
-        for i in range(30):
-            lecture = temporalfileone.read()
-            print lecture
-    except:
-        for i in range(30):
-            lecture = temporalfiletwo.read()
-            print lecture
+        temporalfileone.seek(0)
+        temporalfiletwo.seek(0)
+        outfile = open(args.output, "w")
+        try:
+            for line in temporalfileone:
+                outfile.write(line)
+        except:
+            for line in temporalfiletwo:
+                outfile.write(line)
+            pass
 
-    if ext in ("fasta") and not args.testpool:
+    if ext in ("fasta"):
         debug("Flags", "Fasta section enter")
 
         try:
@@ -627,17 +626,17 @@ def run(arguments):
 
             if not flag_operation:
                 debug("Flag", "Original file input")
-                infile = FastqReader(args.input)
-                reads = infile.sampling(phred_value)
+                infile = FastaReader(args.input)
+                reads = infile.sampling()
                 flag_original = False
             elif flag_one == False and flag_original == False:
                 debug("Flag", "First temporal file input")
-                infile = FastqReader(temporalfileone)
-                reads = infile.sampling(phred_value)
+                infile = FastaReader(temporalfileone)
+                reads = infile.sampling()
             elif flag_two == False and flag_original == False:
                 debug("Flag", "Second temporal file input")
-                infile = FastqReader(temporalfiletwo)
-                reads = infile.sampling(phred_value)
+                infile = FastaReader(temporalfiletwo)
+                reads = infile.sampling()
 
             if argument in ["-lt", "--lefttrimmer"]:
                 debug("Flag", "lefttrimmer treatment")
@@ -667,6 +666,29 @@ def run(arguments):
                 flag_operation = True
                 for read in reads:
                     writable, sequence = read.righttrimmer(args.righttrimmer)
+                    if writable:
+                        if flag_one:
+                            debug("Flag", "Writing over first tamporal file")
+                            temporalfileone.write(read.name + "\n" + sequence + "\n")
+                        elif flag_two:
+                            debug("Flag", "Writing over second tamporal file")
+                            temporalfiletwo.write(read.name + "\n" + sequence + "\n")
+                if flag_one:
+                    debug("Flag", "Cleaning second temporal file")
+                    temporalfiletwo.close()
+                    temporalfiletwo = tempfile.TemporaryFile()
+                elif flag_two:
+                    debug("Flag", "Cleaning first temporal file")
+                    temporalfileone.close()
+                    temporalfileone = tempfile.TemporaryFile()
+
+                flag_one, flag_two = switch(flag_one, flag_two)
+
+            if argument in ["-n", "--nucnumber"]:
+                debug("Flag", "nucnumber treatment")
+                flag_operation = True
+                for read in reads:
+                    writable, sequence = read.nucnumber(args.nucnumber)
                     if writable:
                         if flag_one:
                             debug("Flag", "Writing over first tamporal file")
@@ -800,21 +822,23 @@ def run(arguments):
 
                 flag_one, flag_two = switch(flag_one, flag_two)
 
-
-
         temporalfileone.seek(0)
         temporalfiletwo.seek(0)
-
-        for i in range(20):
-            lecture1 = temporalfileone.read()
-            lecture2 = temporalfiletwo.read()
-            print lecture1, "/", lecture2
+        outfile = open(args.output, "w")
+        try:
+            for line in temporalfileone:
+                outfile.write(line)
+        except:
+            for line in temporalfiletwo:
+                outfile.write(line)
+            pass
 
 def main():
-    parser = argparse.ArgumentParser(prog='filter', description="Bioinformatics NGS filter")
+    parser = argparse.ArgumentParser(prog='pyfilter', description="NGS filter")
     parser.add_argument('input', type=str, help="input file (Fastq, Fasta, Sam")
-    parser.add_argument('-v', '--verbose', type=str, dest='DEBUG_LEVEL', action='store', default=None, help='Level screen output (default: %(default)s)')
-    parser.add_argument('-e', '--text', type=str, default='-', help="file name for text output (default: %(default)s)")
+    parser.add_argument('-o', '--output', type=str, default="filtered_sequence", help="New file name (dafault: %(default)a)")
+    parser.add_argument('-v', '--verbose', type=str, dest='DEBUG_LEVEL', action='store', default=None, help="Level screen output (default: %(default)s)")
+
 
     parser.add_argument('-q', '--minquality', type=int, help='minimum quality accepted')
     parser.add_argument('-Q', '--maxquality', type=int, help='minimum quality accepted')
@@ -837,7 +861,7 @@ def main():
     parser.add_argument('-rt', '--righttrimmer', type=int, help='number of nuc right trimmed')
     parser.add_argument('-lt', '--lefttrimmer', type=int, help='number of nuc left trimmed')
     parser.add_argument('-ra', '--removeambiguous', action="store_true", default=False, help='remove non standar bases (A,C,G,T)')
-    parser.add_argument('-tp', '--testpool', action="store_true", default=False, help='testing diferents traitments, make .csv file')
+
 
     args = parser.parse_args()
     globals().update(args.__dict__)

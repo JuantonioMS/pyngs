@@ -9,7 +9,7 @@ from zipfile import ZipFile
 import numpy as np
 from itertools import islice
 from pystq.plots import BasicPlots, SamPlots
-from pystq import SamReader, FastqReader, FastQ, Sam
+from pystq import SamReader, FastqReader, FastQ, Sam, Fasta, FastaReader
 
 class Bunch(object):
   def __init__(self, adict):
@@ -36,7 +36,6 @@ def run(arguments):
 
     arguments['input'] = argparse.FileType('r')(arguments['input'])
     arguments['text'] = argparse.FileType('w')(arguments['text'])
-    arguments['paired'] = argparse.FileType('r')(arguments['paired'])
 
     args = Bunch(arguments)
     debug("Info", "Starting the program")
@@ -177,6 +176,109 @@ def run(arguments):
             plotter.uniqual_boxplot(qual_array, zip_archive, args.grid, args.color, args.output)
             plotter.unigc_plot(array_gccycle, zip_archive, args.grid, args.output)
             plotter.uniqualitysec_bar(store_qualitysec, zip_archive, args.grid, args.color, args.output)
+            plotter.unilenght_bar(store_len, zip_archive, args.grid, args.color, args.output)
+            plotter.unigcproportion_scatter(store_gc, zip_archive, args.grid, args.color, args.output)
+            plotter.unioverkmer_bar(selected_kmer, zip_archive, args.grid, args.color, args.output)
+            plotter.unikmer_plot(kmer_array, selected_kmer, zip_archive, args.grid, args.output)
+            plotter.uniduplicants_hist(array_duplicants, zip_archive, args.grid, args.color, args.output)
+            plotter.unisecn_bar(array_secn, zip_archive, args.grid, args.color, args.output)
+            plotter.unicyclen_bar(array_cyclen, zip_archive, args.grid, args.color, args.output)
+
+    if ext in ("fa", "fasta"):
+        debug("Flag", "Fasta section enter")
+
+        try:
+            sys.stdout.write("Estimated %i sequences\n" % 10)
+
+        except:
+            with FastaReader(open(args.input.name)) as loaded_file:
+                estimate_sequences = 0
+                for sequences in loaded_file:
+                    estimate_sequences += 1
+
+
+        store_nuc = collections.defaultdict(lambda: collections.defaultdict(int))
+        store_kmers = collections.defaultdict(lambda: collections.defaultdict(int))
+        store_duplicants = collections.defaultdict(int)
+        store_singlekmer = collections.defaultdict(int)
+        store_len = collections.defaultdict(int)
+        store_gc = collections.defaultdict(int)
+        store_secn = collections.defaultdict(int)
+
+
+        infile = FastaReader(args.input)
+        reads = infile.sampling()
+
+        for read in reads:
+
+            #Store sequences lengths
+            store_len[len(read.sequence)] += 1
+            #Store sequence GC proportion
+            store_gc[read.gc_proportion()] += 1
+            #Store sequence N content
+            store_secn[read.sequence.count("N")] += 1
+            #Store sequences duplicated
+            store_duplicants[read.sequence] += 1
+
+            #Store nucleotides and quality per cycle
+            for position, seq in enumerate(read.sequence):
+                store_nuc[position][seq] += 1
+
+            #Store overexpressed kmers and cycle
+            for cycle, kmer in enumerate(kmer_detection(read.sequence, args.kmerlen)):
+                store_kmers[cycle][kmer] += 1
+                store_singlekmer[kmer] += 1
+
+        #Creating secn array
+        array_secn = [0] * (max(store_secn) + 1)
+        for element in store_secn:
+            array_secn[element] = store_secn[element]
+        array_secn = array_secn[1:]
+
+        #Choosing overexpressed kmers
+        sorted_store_singlekmer = sorted(store_singlekmer.items(), key=lambda(k,v): v)
+        selected_kmer = sorted_store_singlekmer[-args.reprkmer:]
+        selected_kmer.reverse()
+
+        #Representing start cycle kmers
+        kmer_array = np.zeros((max(store_len), len(selected_kmer)), dtype=int)
+        for row, (_,cycle) in enumerate(store_kmers.items()):
+            for column, i in enumerate(selected_kmer):
+                key = i[0]
+                kmer_array[row][column] = cycle[key]
+
+        #Choosing duplicants
+        sorted_duplicants = sorted(store_duplicants.items(), key=lambda(k,v): v)
+        array_duplicants = [0] * args.reprduplicate
+        for sequence, repeats in sorted_duplicants:
+            try:
+                array_duplicants[repeats] += 1
+            except IndexError:
+                continue
+
+        #Building nuc_array, gc_arrays and cyclen_array
+        nuc_array = np.zeros((max(store_len.keys()), 5), dtype=float)
+        array_cyclen = []
+        array_gccycle = []
+
+        for row, (_, cycle) in enumerate(store_nuc.items()):
+
+            total = sum(cycle.values())
+            nuc_array[row][0] = float(cycle["A"]) / total * 100
+            nuc_array[row][1] = float(cycle["T"]) / total * 100
+            C_proportion = float(cycle["C"]) / total * 100
+            nuc_array[row][2] = C_proportion
+            G_proportion = float(cycle["G"]) / total * 100
+            nuc_array[row][3] = G_proportion
+            nuc_array[row][4] = float(cycle["N"]) / total * 100
+            array_cyclen.append(cycle["N"])
+            array_gccycle.append(C_proportion + G_proportion)
+
+        with ZipFile(args.zipname + '.zip', mode='w') as zip_archive:
+
+            plotter = BasicPlots(args.input.name)
+            plotter.uninuc_plot(nuc_array, zip_archive, args.grid, args.output)
+            plotter.unigc_plot(array_gccycle, zip_archive, args.grid, args.output)
             plotter.unilenght_bar(store_len, zip_archive, args.grid, args.color, args.output)
             plotter.unigcproportion_scatter(store_gc, zip_archive, args.grid, args.color, args.output)
             plotter.unioverkmer_bar(selected_kmer, zip_archive, args.grid, args.color, args.output)
@@ -453,14 +555,11 @@ def run(arguments):
         with ZipFile(args.zipname + '.zip', mode='w') as zip_archive:
 
             plotter = BasicPlots(args.input.name)
-            plotter.uninuc_plot(nuc_array, zip_archive, args.grid, args.output)
             plotter.uniqual_boxplot(qual_array, zip_archive, args.grid, args.color, args.output)
-            plotter.unigc_plot(array_gccycle, zip_archive, args.grid, args.output)
             plotter.uniqualitysec_bar(store_qualitysec, zip_archive, args.grid, args.color, args.output)
             plotter.unilenght_bar(store_len, zip_archive, args.grid, args.color, args.output)
             plotter.unigcproportion_scatter(store_gc, zip_archive, args.grid, args.color, args.output)
             plotter.unioverkmer_bar(selected_kmer, zip_archive, args.grid, args.color, args.output)
-            plotter.unikmer_plot(kmer_array, selected_kmer, zip_archive, args.grid, args.output)
             plotter.uniduplicants_hist(array_duplicants, zip_archive, args.grid, args.color, args.output)
             plotter.unisecn_bar(array_secn, zip_archive, args.grid, args.color, args.output)
             plotter.unicyclen_bar(array_cyclen, zip_archive, args.grid, args.color, args.output)
@@ -476,9 +575,7 @@ def run(arguments):
 def main():
     parser = argparse.ArgumentParser(prog='analyzer', description="Bioinformatics files analyzer")
     parser.add_argument('input', type=str, help="input file (Fastq, Fasta, Sam")
-    parser.add_argument('-p', '--paired', type=str, help="input a second file")
     parser.add_argument('-v', '--verbose', type=str, dest='DEBUG_LEVEL', action='store', default=None, help="Level screen output (default: %(default)s)")
-    parser.add_argument('-q', '--quiet', action="store_true", default=False, help="do not show nothing on screen (default: %(default)s)")
 
     parser.add_argument('-z', '--zipname', type=str, default='pystq-figures', help="name of the zip (default: %(default)s)")
     parser.add_argument('-k', '--kmerlen', type=int, default=5, choices=range(2, 10), help='length of kmer for over-repesented kmer counts (default: %(default)s)')
@@ -486,14 +583,9 @@ def main():
     parser.add_argument('-d', '--reprduplicate', type=int, default=20, choices=range(2, 80), help='number of represented duplicated sequences (default: %(default)s)')
     parser.add_argument('-o', '--output', type=str, default="", help="name in figures (default: %(default)s)")
     parser.add_argument('-e', '--text', type=str, default='-', help="file name for text output (default: %(default)s)")
-    parser.add_argument('-ll', '--leftlimit', type=int, default=1, help="leftmost cycle limit (default: %(default)s)")
-    parser.add_argument('-rl', '--rightlimit', type=int, default=-1, help="rightmost cycle limit (-1 for none) (default: %(default)s)")
     parser.add_argument('-g', '--grid', action="store_true", default=False, help="show grid on graphics (default: %(default)s)")
     parser.add_argument('-c', '--color', type=str, default="cornflowerblue", help="graphics color, boxplot only blue (default: %(default)s)")
 
-    align_group = parser.add_mutually_exclusive_group()
-    align_group.add_argument('--aligned-only', action="store_true", default=False, help="only aligned reads (default: %(default)s)")
-    align_group.add_argument('--unaligned-only', action="store_true", default=False, help="only unaligned reads (default: %(default)s)")
 
     args = parser.parse_args()
     globals().update(args.__dict__)

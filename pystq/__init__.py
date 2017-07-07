@@ -213,14 +213,17 @@ class FastaReader:
             raise StopIteration
 
     def sampling(self):
-        n = 4
-        for i, line in enumerate(self.filename):
+        sequence= ""
+        for line in self.filename:
+            if line[0] == ">":
+                if sequence != "":
+                    seq = sequence
+                    yield Fasta(name, seq)
+                name = line.strip()
+                sequence = ""
+            else:
+                sequence = sequence + line
 
-            if i % n == 0:
-                name = line.strip().split()[0]
-            elif i % n == 1:
-                seq = line.strip()
-                yield Fasta(name=name, sequence=seq)
 
     def __enter__(self):
         return self

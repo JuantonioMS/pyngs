@@ -325,6 +325,29 @@ class FastqReader:
     def __exit__(self, *args):
         self.filename.close()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """CLASE FASTA"""
 
 class Fasta(object):
@@ -332,6 +355,9 @@ class Fasta(object):
     def __init__(self, name, sequence):
         self.name = name
         self.sequence = sequence
+        print "-------------"
+        print self.sequence
+
 
     def __len__(self):
         return len(self.sequence)
@@ -394,6 +420,14 @@ class Fasta(object):
         seq = Seq(self.sequence, IUPAC.unambiguous_rna)
         retro_transcript = str(seq.back_transcribe())
         return True, retro_transcript
+
+    def nucnumber(self, nuc_number):
+        if nuc_number <= len(self.sequence):
+            transformed_seq = self.sequence[:nuc_number]
+            return True, transformed_seq
+
+
+
 
 """CLASE SAM"""
 
@@ -691,63 +725,29 @@ class FastaReader:
         try:
             name = next(self.filename).strip()
             sequence = next(self.filename).strip()
-
-            return FastQ(name, sequence)
-
-        except StopIteration:
-            raise StopIteration
-
-    def sampling(self, phred_value):
-        n = 2
-        for i, line in enumerate(self.filename):
-
-            if i % n == 0:
-                name = line.strip().split()[0]
-            elif i % n == 1:
-                seq = line.strip()
-                yield Fasta(name=name, sequence=seq)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.filename.close()
-
-class FastaReader:
-
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __iter__(self):
-        return self
-
-    def ___next__(self):
-        return self.next()
-
-    def next(self):
-        try:
-            name = next(self.filename).strip()
-            sequence = next(self.filename).strip()
             return Fasta(name, sequence)
 
         except StopIteration:
             raise StopIteration
 
     def sampling(self):
-        n = 4
-        for i, line in enumerate(self.filename):
-
-            if i % n == 0:
-                name = line.strip().split()[0]
-            elif i % n == 1:
-                seq = line.strip()
-                yield Fasta(name=name, sequence=seq)
+        sequence= ""
+        for line in self.filename:
+            if line[0] == ">":
+                if sequence != "":
+                    seq = sequence
+                    yield Fasta(name, seq)
+                name = line.strip()
+                sequence = ""
+            else:
+                sequence = sequence + line
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         self.filename.close()
+
 
 def asciidetection(quality):
     low_list = [chr(character) for character in range(33,59)]
